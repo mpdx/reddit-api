@@ -58,6 +58,8 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

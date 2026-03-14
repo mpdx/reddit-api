@@ -293,3 +293,51 @@ def scrape_subreddit(subreddit: str, lookback_hours: int = 24):
         browser.close()
 
     log.info("scrape complete", subreddit=subreddit, count=len(all_posts))
+
+
+def scrape_watched_posts(post_rows: list[dict]):
+    if not post_rows:
+        log.info("no watched posts to re-scrape")
+        return
+
+    log.info("starting viral re-scrape", count=len(post_rows))
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            locale="en-US",
+            timezone_id="America/New_York",
+        )
+        context.add_cookies([{"name": "redesign_optout", "value": "true", "domain": ".reddit.com", "path": "/"}])
+        page = context.new_page()
+        _add_interceptors(page)
+
+        scraped_at = datetime.now(tz=timezone.utc).isoformat()
+        consecutive_failures = 0
+
+        for row in post_rows:
+            raw = row["data"]
+            post = {
+                "id": raw["id"],
+                "url": raw["url"],
+                "subreddit": raw["subreddit"],
+                "dt": raw["timestamp"],
+                "timestamp": raw["timestamp_millis"],
+                "author": raw.get("author", ""),
+                "flair": raw.get("flair"),
+            }
+            try:
+                data = _get_post_data(page, post)
+                data["scrapedAt"] = scraped_at
+                publisher.publish_one(data)
+                consecutive_failures = 0
+                time.sleep(2)
+            except Exception:
+                log.exception("failed to re-scrape watched post", post_id=post["id"])
+                consecutive_failures += 1
+                time.sleep(min(10 * consecutive_failures, 60))
+
+        browser.close()
+
+    log.info("viral re-scrape complete", count=len(post_rows))

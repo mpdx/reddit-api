@@ -77,6 +77,10 @@ def main():
             ch.basic_ack(delivery_tag=method.delivery_tag)
         except Exception:
             log.exception("nacking message")
+            try:
+                pg_conn.rollback()
+            except Exception:
+                log.exception("rollback failed")
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
     channel.basic_consume(queue=QUEUE, on_message_callback=on_message)

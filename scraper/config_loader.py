@@ -37,9 +37,22 @@ def get_subreddits() -> list[str]:
     return [f"r/{s}" if not s.startswith("r/") else s for s in subs]
 
 
-def get_lookback_hours() -> int:
+def get_tiers() -> list[dict]:
     with _lock:
-        return int(_config.get("lookback_hours", os.environ.get("LOOKBACK_HOURS", 24)))
+        return _config.get("tiers", [])
+
+
+def get_viral_config() -> dict:
+    defaults = {
+        "enabled": False,
+        "initial_points": 500,
+        "min_delta": 50,
+        "watch_days": 7,
+        "rescrape_interval_hours": 2,
+    }
+    with _lock:
+        raw = _config.get("viral", {})
+    return {**defaults, **raw}
 
 
 class _ReloadHandler(FileSystemEventHandler):

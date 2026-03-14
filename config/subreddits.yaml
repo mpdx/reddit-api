@@ -1,5 +1,18 @@
 subreddits:
   - programming
   - golang
-scrape_interval_hours: 1
-lookback_hours: 72
+
+tiers:
+  - interval_hours: 1
+    lookback_hours: 8
+  - interval_hours: 4
+    lookback_hours: 24
+  - interval_hours: 12
+    lookback_hours: 72
+
+viral:
+  enabled: true
+  initial_points: 250
+  min_delta: 25
+  watch_days: 7
+  rescrape_interval_hours: 2
