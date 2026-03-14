@@ -1,0 +1,5 @@
+subreddits:
+  - programming
+  - golang
+scrape_interval_hours: 1
+lookback_hours: 72
