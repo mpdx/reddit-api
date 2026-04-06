@@ -34,6 +34,8 @@ async def get_posts_for_subreddit(
     after_id: str | None = None,
     before_id: str | None = None,
     limit: int = 25,
+    q: str | None = None,
+    flair: str | None = None,
 ) -> list[dict]:
     pool = await get_pool()
 
@@ -55,49 +57,40 @@ async def get_posts_for_subreddit(
         if row:
             before_ts = row["timestamp"]
 
-    if after_ts is not None and before_ts is not None:
-        rows = await pool.fetch(
-            """
-            SELECT data FROM posts
-            WHERE subreddit = $1 AND timestamp < $2 AND timestamp > $3
-            ORDER BY timestamp DESC
-            LIMIT $4
-            """,
-            subreddit, after_ts, before_ts, limit,
-        )
-    elif after_ts is not None:
-        # "after" in Reddit = older posts (timestamp < cursor)
-        rows = await pool.fetch(
-            """
-            SELECT data FROM posts
-            WHERE subreddit = $1 AND timestamp < $2
-            ORDER BY timestamp DESC
-            LIMIT $3
-            """,
-            subreddit, after_ts, limit,
-        )
-    elif before_ts is not None:
-        # "before" in Reddit = newer posts (timestamp > cursor), maintain DESC order
-        rows = await pool.fetch(
-            """
-            SELECT data FROM posts
-            WHERE subreddit = $1 AND timestamp > $2
-            ORDER BY timestamp ASC
-            LIMIT $3
-            """,
-            subreddit, before_ts, limit,
-        )
+    # Build WHERE clause dynamically
+    conditions = ["subreddit = $1"]
+    params: list = [subreddit]
+
+    def p(value) -> str:
+        params.append(value)
+        return f"${len(params)}"
+
+    if after_ts is not None:
+        conditions.append(f"timestamp < {p(after_ts)}")
+    if before_ts is not None:
+        # "before" = newer posts when used alone; combined with after it's a range
+        op = ">" if after_ts is None else ">"
+        conditions.append(f"timestamp {op} {p(before_ts)}")
+
+    if q:
+        pn = p(f"%{q}%")
+        conditions.append(f"(data->>'title' ILIKE {pn} OR data->>'text' ILIKE {pn})")
+
+    if flair:
+        conditions.append(f"data->>'flair' ILIKE {p(flair)}")
+
+    where = " AND ".join(conditions)
+    # "before" alone = newer posts → ASC so we can reverse to get DESC output
+    order = "ASC" if (before_ts is not None and after_ts is None) else "DESC"
+    limit_pn = p(limit)
+
+    rows = await pool.fetch(
+        f"SELECT data FROM posts WHERE {where} ORDER BY timestamp {order} LIMIT {limit_pn}",
+        *params,
+    )
+
+    if before_ts is not None and after_ts is None:
         rows = list(reversed(rows))
-    else:
-        rows = await pool.fetch(
-            """
-            SELECT data FROM posts
-            WHERE subreddit = $1
-            ORDER BY timestamp DESC
-            LIMIT $2
-            """,
-            subreddit, limit,
-        )
 
     return [json.loads(r["data"]) for r in rows]
 

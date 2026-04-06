@@ -114,6 +114,8 @@ async def get_subreddit(
     before: str = Query(default=""),
     limit: int = Query(default=25, ge=1, le=100),
     t: str = Query(default="all"),
+    q: str = Query(default=""),
+    flair: str = Query(default=""),
 ):
     if sort not in VALID_SORTS:
         raise HTTPException(status_code=404, detail="invalid sort")
@@ -126,7 +128,12 @@ async def get_subreddit(
     before_id = f"t3_{strip_prefix(before)}" if before else None
 
     posts = await db.get_posts_for_subreddit(
-        prefixed, after_id=after_id, before_id=before_id, limit=limit
+        prefixed,
+        after_id=after_id,
+        before_id=before_id,
+        limit=limit,
+        q=q or None,
+        flair=flair or None,
     )
 
     next_after = strip_prefix(posts[-1]["id"]) if posts else None
